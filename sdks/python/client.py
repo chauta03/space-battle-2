@@ -65,49 +65,32 @@ class Game:
         # completes the moves for each worker in each resource assignment
         commands = []
         move = 'MOVE'
+        gather = "GATHER"
         for resource_id in self.resource_assignments:
-            # ensure worker is on correct path for resource
-            worker_loc = (self.worker_dict[self.resource_assignments[resource_id]]["x"], self.worker_dict[self.resource_assignments[resource_id]]["y"])
-            # if worker_loc not in self.resources_info["path"]:
-            #     #move to path
+            # gets id and location of current worker
+            worker_id = self.resource_assignments[resource_id]
+            worker_loc = (self.worker_dict[worker_id]["x"], self.worker_dict[worker_id]["y"])
 
-            # moves to resource if carrying nothing
-            if self.worker_dict[self.resource_assignments[resource_id]]["resource"] == 0:
-                path = a_star_search(self.grid, worker_loc, self.resources_info[resource_id]["location"])
-                direction = self.find_direction(worker_loc, path[0])
+            # checks if the workers has no resources
+            if self.worker_dict[worker_id]["resource"] == 0:
+                # checks if the worker can gather
+                if self.is_adjacent(worker_loc, self.resources_info[resource_id]["location"]):
+                    commands.append({"command": gather, "unit": worker_id})
+
+                # if it cannot gather then move to resource
+                else:
+                    path = a_star_search(self.grid, worker_loc, self.resources_info[resource_id]["location"])
+                    direction = self.get_direction_from_move(worker_loc, path[0])
+                    commands.append({"command": move, "unit": worker_id, "dir": direction})
             else:
                 path = a_star_search(self.grid, worker_loc, self.base_location)
-                direction = self.find_direction(worker_loc, path[0])
-            commands.append({"command": move, "unit": self.resource_assignments[resource_id], "dir": direction})
+                direction = self.get_direction_from_move(worker_loc, path[0])
+                commands.append({"command": move, "unit": worker_id, "dir": direction})
 
         print(commands)
         command = {"commands": commands}
         response = json.dumps(command, separators=(',', ':')) + '\n'
         return response
-
-
-    def find_direction(self, start, end):
-        x1, y1 = start
-        x2, y2 = end
-
-        # Determine vertical direction
-        if y2 > y1:
-            vertical = "N"
-        elif y2 < y1:
-            vertical = "S"
-        else:
-            vertical = ""
-
-        # Determine horizontal direction
-        if x2 > x1:
-            horizontal = "E"
-        elif x2 < x1:
-            horizontal = "W"
-        else:
-            horizontal = ""
-
-        # Combine directions
-        return vertical + horizontal or "Same location"
 
 
     def update_workers(self, worker_updates):
@@ -138,6 +121,8 @@ class Game:
 
     def remove_resource(self, resource_id):
         self.resource_priorities.remove(resource_id)
+
+
     def get_direction_from_move(self, current_position, move):
         # Returns the direction to move from current_position to move
         x1, y1 = current_position
@@ -146,6 +131,14 @@ class Game:
         if x1 > x2: return 'N'
         if y1 < y2: return 'E'
         if y1 > y2: return 'W'
+
+
+    def is_adjacent(self, current, target):
+        x1, y1 = current
+        x2, y2 = target
+
+        # Check if the locations differ by exactly 1 in either x or y, and not both
+        return (abs(x1 - x2) == 1 and y1 == y2) or (abs(y1 - y2) == 1 and x1 == x2)
 
 
     def create_grid(self, game_info):
