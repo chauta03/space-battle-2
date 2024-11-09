@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-import sys
+from collections import deque
 import json
 import random
 import bisect
@@ -14,59 +12,74 @@ else:
     print("Python 2.X detected")
     import SocketServer as ss
 
+import sys
+import socketserver as ss
+import heapq
 
 class NetworkHandler(ss.StreamRequestHandler):
     def handle(self):
         game = Game()
-
         while True:
-            data = self.rfile.readline().decode() # reads until '\n' encountered
+            data = self.rfile.readline().decode()  # reads until '\n' encountered
             json_data = json.loads(str(data))
-            # uncomment the following line to see pretty-printed data
             print(json.dumps(json_data, indent=4, sort_keys=True))
             response = game.get_random_move(json_data).encode()
             self.wfile.write(response)
 
 
-
 class Game:
     def __init__(self):
-        self.units = set() # set of unique unit ids
-        self.resource_assignments = dict() # dict with key resource id and list of assigned workers
+        self.units = set()  # set of unique unit ids
         self.directions = ['N', 'S', 'E', 'W']
-        self.base_location = None # TODO update
-        self.resource_priorities = [] # stores the id of each resource in priority order
-        self.resources_info = dict() # provides using id as key, provides path to resource and revenue per turn
-        self.worker_dict = dict()
-
+        self.dirs = ((-1, 0), (1, 0), (0, 1), (0, -1))
+        self.grid = []
+        self.visited = set()
+        self.width = 0
+        self.height = 0
 
     def get_random_move(self, json_data):
-        units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] != 'base'])
-        self.units |= units # add any additional ids we encounter
+        # If the first move
+        if "game_info" in json_data:
+            self.create_grid(json_data["game_info"])
 
-        # loops through units getting workers
-        # TODO persistently store workers
-        worker_updates = [unit for unit in json_data['unit_updates'] if unit['type'] == 'worker']
-        self.update_workers(worker_updates)
+        # Update grid after every move
+        self.update_grid(json_data["tile_updates"])
 
-        # loops through idle workers and assigns them to a resource
-        for worker_id in worker_dict:
-            if worker_dict[worker_id]["status"] == "idle":
-                for resource_id in self.resource_priorities:
-                    if not self.resource_assignments.get(resource_id):
-                        self.resource_assignments[resource_id] =  worker_dict[worker_id]["id"]
-
-        # completes the moves for each worker in each resource assignment
-        for resource_id in self.resource_assignments:
-            worker_loc = json_data['unit_updates'][self.resource_assignments[resource_id]]
-            if json_data['unit_updates'][self.resource_assignments[resource_id]]
+        # Add new units to the set of units
+        units = set()
+        for unit in json_data['unit_updates']:
+            if unit['type'] != 'base':
+                x, y = unit['x'], unit['y']
+                units.add((unit['id'], x, y))
+                self.visited.add((x, y))
 
 
-        unit = random.choice(tuple(self.units))
-        direction = random.choice(self.directions)
+        self.units |= units # Add any other we encounter
+        print("units", units)
+
+        commands = []
         move = 'MOVE'
-        command = {"commands": [{"command": move, "unit": unit, "dir": direction}]}
-        response = json.dumps(command, separators=(',',':')) + '\n'
+
+        for unit, x, y in units:
+            s = []
+
+            for i in range(len(self.dirs)):
+                dx, dy = self.dirs[i]
+                newX, newY = x + dx, y + dy
+
+                if (0 <= newX < self.height and 
+                   0 <= newY < self.width and 
+                   (not self.grid[newX][newY]['blocked'])):
+                        heapq.heappush(s, ((newX, newY) in self.visited, i, newX, newY))
+            
+            b, idx, newX, newY = heapq.heappop(s)
+            direction = self.directions[idx] 
+            self.visited.add((newX, newY))
+            commands.append({"command": "MOVE", "unit": unit, "dir": direction})
+
+        print(commands)
+        command = {"commands": commands}
+        response = json.dumps(command, separators=(',', ':')) + '\n'
         return response
 
     def update_workers(self, worker_updates):
@@ -96,6 +109,34 @@ class Game:
 
     def remove_resource(self, resource_id):
         self.resource_priorities.remove(resource_id)
+    def get_direction_from_move(self, current_position, move):
+        # Returns the direction to move from current_position to move
+        x1, y1 = current_position
+        x2, y2 = move
+        if x1 < x2: return 'S'
+        if x1 > x2: return 'N'
+        if y1 < y2: return 'E'
+        if y1 > y2: return 'W'
+
+
+    def create_grid(self, game_info):
+        self.width = game_info["map_width"]
+        self.height = game_info["map_height"]
+        self.grid = [[dict() for _ in range(self.width)] for _ in range(self.height)]
+
+
+    def update_grid(self, tile_updates):
+        for item in tile_updates:
+            x = item['x']
+            y = item['y']
+            visible = item['visible']
+            self.grid[x][y]['visible'] = visible
+
+            if visible:
+                blocked = item['blocked']
+                resources = item['resources']
+                self.grid[x][y]['blocked'] = blocked
+                self.grid[x][y]['resources'] = resources
 
 
 if __name__ == "__main__":
