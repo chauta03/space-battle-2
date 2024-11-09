@@ -1,3 +1,6 @@
+import sys
+import socketserver as ss
+import heapq
 from collections import deque
 import json
 import random
@@ -12,9 +15,7 @@ else:
     print("Python 2.X detected")
     import SocketServer as ss
 
-import sys
-import socketserver as ss
-import heapq
+
 
 class NetworkHandler(ss.StreamRequestHandler):
     def handle(self):
@@ -32,6 +33,7 @@ class Game:
         self.units = set()  # set of unique unit ids
         self.directions = ['N', 'S', 'E', 'W']
         self.base_location = None # TODO update
+        self.resource_assignments = {} # key: resource id value: worker assigned
         self.resource_priorities = [] # stores the id of each resource in priority order
         self.resources_info = dict() # provides using id as key, provides path to resource, revenue per turn, location # TODO maybe don't store????
         self.worker_dict = dict()
@@ -77,27 +79,6 @@ class Game:
                 path = a_star_search(self.grid, worker_loc, self.base_location)
                 direction = self.find_direction(worker_loc, path[0])
             commands.append({"command": move, "unit": self.resource_assignments[resource_id], "dir": direction})
-
-        response = json.dumps(commands, separators=(',',':')) + '\n'
-        commands = []
-        move = 'MOVE'
-
-        for unit, x, y in units:
-            s = []
-
-            for i in range(len(self.dirs)):
-                dx, dy = self.dirs[i]
-                newX, newY = x + dx, y + dy
-
-                if (0 <= newX < self.height and
-                   0 <= newY < self.width and
-                   (not self.grid[newX][newY]['blocked'])):
-                        heapq.heappush(s, ((newX, newY) in self.visited, i, newX, newY))
-
-            b, idx, newX, newY = heapq.heappop(s)
-            direction = self.directions[idx]
-            self.visited.add((newX, newY))
-            commands.append({"command": "MOVE", "unit": unit, "dir": direction})
 
         print(commands)
         command = {"commands": commands}
