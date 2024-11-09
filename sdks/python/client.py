@@ -36,7 +36,7 @@ class Game:
         self.directions = ['N', 'S', 'E', 'W']
         self.base_location = None # TODO update
         self.resource_priorities = [] # stores the id of each resource in priority order
-        self.resources_info = dict() # provides using id as key, provides path to resource and revenue per turn
+        self.resources_info = dict() # provides using id as key, provides path to resource, revenue per turn, location # TODO maybe don't store????
         self.worker_dict = dict()
 
 
@@ -45,29 +45,61 @@ class Game:
         self.units |= units # add any additional ids we encounter
 
         # loops through units getting workers
-        # TODO persistently store workers
         worker_updates = [unit for unit in json_data['unit_updates'] if unit['type'] == 'worker']
         self.update_workers(worker_updates)
 
         # loops through idle workers and assigns them to a resource
-        for worker_id in worker_dict:
-            if worker_dict[worker_id]["status"] == "idle":
+        for worker_id in self.worker_dict:
+            if self.worker_dict[worker_id]["status"] == "idle":
                 for resource_id in self.resource_priorities:
                     if not self.resource_assignments.get(resource_id):
-                        self.resource_assignments[resource_id] =  worker_dict[worker_id]["id"]
+                        self.resource_assignments[resource_id] =  self.worker_dict[worker_id]["id"]
 
         # completes the moves for each worker in each resource assignment
-        for resource_id in self.resource_assignments:
-            worker_loc = json_data['unit_updates'][self.resource_assignments[resource_id]]
-            if json_data['unit_updates'][self.resource_assignments[resource_id]]
-
-
-        unit = random.choice(tuple(self.units))
-        direction = random.choice(self.directions)
+        commands = []
         move = 'MOVE'
-        command = {"commands": [{"command": move, "unit": unit, "dir": direction}]}
-        response = json.dumps(command, separators=(',',':')) + '\n'
+        for resource_id in self.resource_assignments:
+            # ensure worker is on correct path for resource
+            worker_loc = (self.worker_dict[self.resource_assignments[resource_id]]["x"], self.worker_dict[self.resource_assignments[resource_id]]["y"])
+            # if worker_loc not in self.resources_info["path"]:
+            #     #move to path
+
+            # moves to resource if carrying nothing
+            if self.worker_dict[self.resource_assignments[resource_id]]["resource"] == 0:
+                path = a_star_search(self.grid, worker_loc, self.resources_info[resource_id]["location"])
+                direction = self.find_direction(worker_loc, path[0])
+            else:
+                path = a_star_search(self.grid, worker_loc, self.base_location)
+                direction = self.find_direction(worker_loc, path[0])
+            commands.append({"command": move, "unit": self.resource_assignments[resource_id], "dir": direction})
+
+        response = json.dumps(commands, separators=(',',':')) + '\n'
         return response
+
+
+    def find_direction(self, start, end):
+        x1, y1 = start
+        x2, y2 = end
+
+        # Determine vertical direction
+        if y2 > y1:
+            vertical = "N"
+        elif y2 < y1:
+            vertical = "S"
+        else:
+            vertical = ""
+
+        # Determine horizontal direction
+        if x2 > x1:
+            horizontal = "E"
+        elif x2 < x1:
+            horizontal = "W"
+        else:
+            horizontal = ""
+
+        # Combine directions
+        return vertical + horizontal or "Same location"
+
 
     def update_workers(self, worker_updates):
         for worker_update in worker_updates:
@@ -82,6 +114,7 @@ class Game:
 
     def add_resource(self, new_resource_info, resource_loc):
         self.resources_info[new_resource_info["id"]] = {}
+        self.resources_info[new_resource_info["id"]]["location"] = resource_loc
         self.resources_info[new_resource_info["id"]]["path"] = a_star_search(self.grid, self.base_location, resource_loc)
         self.resources_info[new_resource_info["id"]]["resource_rev"] = new_resource_info["value"]/((len(self.resources_info[new_resource_info["id"]]["path"])-1)*2+2)
 
