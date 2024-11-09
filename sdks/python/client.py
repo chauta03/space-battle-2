@@ -55,9 +55,16 @@ class Game:
         worker_updates = [unit for unit in json_data['unit_updates'] if unit['type'] == 'worker']
         self.update_workers(worker_updates)
 
+        # checks status of all resources
+        resource_updates = [tile for tile in json_data['tile_updates'] if tile['resources']]
+        for resource in resource_updates:
+            if resource["total"] <= 0:
+                self.resource_priorities.remove(resource["id"])
+                del self.resource_assignments[resource["id"]]
+
         # loops through idle workers and assigns them to a resource
         for worker_id in self.worker_dict:
-            if self.worker_dict[worker_id]["status"] == "idle":
+            if self.worker_dict[worker_id]["status"] == "idle": # Todo may need to do check when resource runs out
                 for resource_id in self.resource_priorities:
                     if not self.resource_assignments.get(resource_id):
                         self.resource_assignments[resource_id] =  self.worker_dict[worker_id]["id"]
